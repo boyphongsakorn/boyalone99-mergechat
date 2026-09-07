@@ -20,13 +20,22 @@ Then edit `.env`:
 - **Twitch**: set `TWITCH_CHANNEL` to the channel name (no `#`). This is enough for
   read-only anonymous chat viewing. If you also want to eventually send messages,
   fill in `TWITCH_USERNAME` and `TWITCH_OAUTH_TOKEN` (get a token from
-  https://twitchtokengenerator.com).
+  https://twitchtokengenerator.com). To refresh an expiring access token at startup,
+  set `TWITCH_OAUTH_REFRESH` with the refresh token from
+  https://twitchtokengenerator.com. The app calls TwitchTokenGenerator's refresh
+  API before connecting. Twitch may rotate the refresh token, so replace
+  `TWITCH_OAUTH_REFRESH` with the newest `refresh_token` returned by the service
+  when that happens.
+- **Kick**: set `KICK_CHANNEL` to the public channel slug. Kick chat is read in
+  anonymous read-only mode, so no Kick credentials are required.
 
 ## Run
 
 ```bash
 npm start
 ```
+
+Open [http://localhost:3000](http://localhost:3000) to view the merged browser chat. The terminal output remains available, and the browser view reconnects automatically if the server connection drops.
 
 Example output:
 

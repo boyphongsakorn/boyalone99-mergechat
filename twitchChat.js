@@ -1,13 +1,45 @@
 const tmi = require("tmi.js");
 
+const TWITCH_REFRESH_URL = "https://twitchtokengenerator.com/api/v2/tokens/refresh";
+
+async function refreshTwitchToken({ refreshToken }) {
+  if (!refreshToken) {
+    throw new Error("TWITCH_OAUTH_REFRESH is required to refresh a Twitch token.");
+  }
+
+  const response = await fetch(TWITCH_REFRESH_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  const data = await response.json();
+
+  if (!response.ok || !data.access_token) {
+    throw new Error(`TwitchTokenGenerator refresh failed: ${data.message || response.statusText}`);
+  }
+
+  return data;
+}
+
 /**
  * Connect to a Twitch channel's chat and stream messages.
  * Works anonymously (read-only) if no username/token is given.
  * Returns a stop() function.
  */
-function startTwitchWatcher({ channel, username, oauthToken }, onMessage, onError) {
+async function startTwitchWatcher({ channel, username, oauthToken, oauthRefresh }, onMessage, onError) {
   if (!channel) {
     onError(new Error("TWITCH_CHANNEL is not set — skipping Twitch chat."));
+    return () => {};
+  }
+
+  try {
+    if (oauthRefresh) {
+      const refreshed = await refreshTwitchToken({ refreshToken: oauthRefresh });
+      oauthToken = refreshed.access_token;
+      console.log("[twitch] OAuth access token refreshed");
+    }
+  } catch (err) {
+    onError(err);
     return () => {};
   }
 
@@ -43,4 +75,4 @@ function startTwitchWatcher({ channel, username, oauthToken }, onMessage, onErro
   };
 }
 
-module.exports = { startTwitchWatcher };
+module.exports = { refreshTwitchToken, startTwitchWatcher };
