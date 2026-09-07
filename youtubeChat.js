@@ -1,4 +1,5 @@
 const API_BASE = "https://www.googleapis.com/youtube/v3";
+const LIVE_BROADCAST_RETRY_MS = 5 * 60 * 1000;
 
 /**
  * Find the video id of a channel's current live broadcast.
@@ -107,20 +108,42 @@ async function startYouTubeWatcher({ apiKey, videoId, channelId }, onMessage, on
     return () => {};
   }
 
-  try {
-    let resolvedVideoId = videoId;
-    if (!resolvedVideoId) {
-      if (!channelId) {
-        throw new Error("Set either YOUTUBE_VIDEO_ID or YOUTUBE_CHANNEL_ID.");
+  let stopped = false;
+  let retryTimer = null;
+  let stopChat = () => {};
+
+  async function findAndWatch() {
+    if (stopped) return;
+
+    try {
+      let resolvedVideoId = videoId;
+      if (!resolvedVideoId) {
+        if (!channelId) {
+          throw new Error("Set either YOUTUBE_VIDEO_ID or YOUTUBE_CHANNEL_ID.");
+        }
+        resolvedVideoId = await findLiveVideoId(channelId, apiKey);
       }
-      resolvedVideoId = await findLiveVideoId(channelId, apiKey);
+      const liveChatId = await getActiveLiveChatId(resolvedVideoId, apiKey);
+      if (stopped) return;
+      stopChat = watchLiveChat(liveChatId, apiKey, onMessage, onError);
+    } catch (err) {
+      onError(err);
+      if (!videoId && !stopped) {
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          findAndWatch();
+        }, LIVE_BROADCAST_RETRY_MS);
+      }
     }
-    const liveChatId = await getActiveLiveChatId(resolvedVideoId, apiKey);
-    return watchLiveChat(liveChatId, apiKey, onMessage, onError);
-  } catch (err) {
-    onError(err);
-    return () => {};
   }
+
+  await findAndWatch();
+
+  return function stop() {
+    stopped = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    stopChat();
+  };
 }
 
 module.exports = { startYouTubeWatcher };
