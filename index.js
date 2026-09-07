@@ -38,8 +38,11 @@ function printError(platform, err) {
   publish("status", { platform, message: err.message });
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: { Accept: "application/json", ...(options.headers || {}) },
+  });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json();
 }
@@ -60,14 +63,47 @@ function addSevenTvEmotes(catalog, set) {
   }
 }
 
+function addTwitchEmote(catalog, emote) {
+  if (!emote || !emote.code || !emote.id) return;
+  catalog[emote.code] = `https://static-cdn.jtvnw.net/emoticons/v2/${emote.id}/default/dark/2.0`;
+}
+
+function addTwitchChannelEmotes(catalog, data) {
+  for (const product of data.subProducts || []) {
+    for (const emote of product.emotes || []) addTwitchEmote(catalog, emote);
+  }
+  for (const emote of data.bitEmotes || []) addTwitchEmote(catalog, emote);
+  for (const group of data.localEmotes || []) {
+    for (const emote of group.emotes || []) addTwitchEmote(catalog, emote);
+  }
+}
+
+async function addTwitchGlobalEmotes(catalog) {
+  const clientId = process.env.TWITCH_CLIENT_ID;
+  const accessToken = (process.env.TWITCH_OAUTH_TOKEN || "").replace(/^oauth:/, "");
+  if (!clientId || !accessToken) return;
+
+  const data = await fetchJson("https://api.twitch.tv/helix/chat/emotes/global", {
+    headers: {
+      Accept: "application/json",
+      "Client-ID": clientId,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  for (const emote of data.data || []) {
+    addTwitchEmote(catalog, emote);
+  }
+}
+
 function loadEmotes() {
   if (emotesPromise) return emotesPromise;
 
   emotesPromise = (async () => {
     const catalog = {};
-    const [bttvGlobal, sevenTvGlobal] = await Promise.allSettled([
+    const [bttvGlobal, sevenTvGlobal, twitchGlobal] = await Promise.allSettled([
       fetchJson("https://api.betterttv.net/3/cached/emotes/global"),
       fetchJson("https://7tv.io/v3/emote-sets/global"),
+      addTwitchGlobalEmotes(catalog),
     ]);
     if (bttvGlobal.status === "fulfilled") addBttvEmotes(catalog, bttvGlobal.value);
     if (sevenTvGlobal.status === "fulfilled") addSevenTvEmotes(catalog, sevenTvGlobal.value);
@@ -77,15 +113,17 @@ function loadEmotes() {
         const users = await fetchJson(`https://api.ivr.fi/v2/twitch/user?login=${encodeURIComponent(process.env.TWITCH_CHANNEL)}`);
         const user = Array.isArray(users) ? users[0] : users;
         if (user && user.id) {
-          const [bttvChannel, sevenTvChannel] = await Promise.allSettled([
+          const [bttvChannel, sevenTvChannel, twitchChannel] = await Promise.allSettled([
             fetchJson(`https://api.betterttv.net/3/cached/users/twitch/${user.id}`),
             fetchJson(`https://7tv.io/v3/users/twitch/${user.id}`),
+            fetchJson(`https://api.ivr.fi/v2/twitch/emotes/channel/${encodeURIComponent(process.env.TWITCH_CHANNEL)}`),
           ]);
           if (bttvChannel.status === "fulfilled") {
             addBttvEmotes(catalog, bttvChannel.value.channelEmotes);
             addBttvEmotes(catalog, bttvChannel.value.sharedEmotes);
           }
           if (sevenTvChannel.status === "fulfilled") addSevenTvEmotes(catalog, sevenTvChannel.value.emote_set);
+          if (twitchChannel.status === "fulfilled") addTwitchChannelEmotes(catalog, twitchChannel.value);
         }
       } catch (error) {
         console.error(`[emotes] channel lookup failed: ${error.message}`);

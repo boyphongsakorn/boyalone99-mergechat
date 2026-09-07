@@ -24,6 +24,9 @@ Then edit `.env`:
   API before connecting. Twitch may rotate the refresh token, so replace
   `TWITCH_OAUTH_REFRESH` with the newest `refresh_token` returned by the service
   when that happens.
+  Native Twitch channel emotes are loaded from `TWITCH_CHANNEL`. Native Twitch
+  global emotes additionally require the matching `TWITCH_CLIENT_ID` and
+  `TWITCH_OAUTH_TOKEN` for the Twitch Helix API.
 - **Kick**: set `KICK_CHANNEL` to the public channel slug. Kick chat is read in
   anonymous read-only mode, so no Kick credentials are required.
 
