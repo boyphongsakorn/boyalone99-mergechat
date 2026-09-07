@@ -76,7 +76,6 @@ function startWatchers() {
   watchersPromise = (async () => {
     stopYouTube = await startYouTubeWatcher(
     {
-      apiKey: process.env.YOUTUBE_API_KEY,
       videoId: process.env.YOUTUBE_VIDEO_ID,
       channelId: process.env.YOUTUBE_CHANNEL_ID,
     },

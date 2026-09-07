@@ -12,9 +12,7 @@ cp .env.example .env
 
 Then edit `.env`:
 
-- **YouTube**: create an API key in [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-  with the **YouTube Data API v3** enabled, and put it in `YOUTUBE_API_KEY`.
-  Then set either:
+- **YouTube**: set either:
   - `YOUTUBE_VIDEO_ID` — the id from a live video's URL (`youtube.com/watch?v=THIS_PART`), or
   - `YOUTUBE_CHANNEL_ID` — the script will look up whatever that channel is currently streaming live.
 - **Twitch**: set `TWITCH_CHANNEL` to the channel name (no `#`). This is enough for
@@ -51,10 +49,9 @@ Press `Ctrl+C` to stop both watchers.
 
 ## Notes
 
-- YouTube chat is polled (not a websocket) — the API tells the client how often to
-  poll (`pollingIntervalMillis`), usually every few seconds. This does consume
-  YouTube Data API quota; polling a busy chat for a long time can add up, so
-  keep an eye on your quota in Google Cloud Console.
+- YouTube chat uses the public `youtube-chat` transport and does not consume
+  YouTube Data API quota. It is an unofficial endpoint and may break if YouTube
+  changes its internal chat response format.
 - Twitch chat connects over IRC via `tmi.js` in real time, no polling needed.
 - If a YouTube video isn't currently live, `getActiveLiveChatId` will throw a
   clear error instead of silently failing.
