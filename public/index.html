@@ -84,7 +84,7 @@
       header { display: block; }
       .tagline { margin-top: 14px; text-align: left; }
       .layout { grid-template-columns: 1fr; }
-      .chat-panel { min-height: 62vh; }
+      .chat-panel { height: 62vh; min-height: 420px; }
       .toolbar { align-items: flex-start; flex-direction: column; }
       .message { grid-template-columns: 7px minmax(0, max-content) minmax(0, 1fr) max-content; grid-template-rows: auto auto; gap: 7px 9px; }
       .message .bar { grid-column: 1; grid-row: 1 / 3; }
@@ -132,7 +132,7 @@
       return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
-    function render() {
+    function render(revealNewest = false) {
       const visible = messages.filter((item) => activeFilter === 'all' || item.platform === activeFilter);
       messageList.replaceChildren();
       if (!visible.length) {
@@ -152,6 +152,9 @@
         });
         messageList.append(fragment);
         messageList.scrollTop = messageList.scrollHeight;
+        if (revealNewest && window.matchMedia('(max-width: 760px)').matches) {
+          requestAnimationFrame(() => messageList.lastElementChild.scrollIntoView({ block: 'end', behavior: 'smooth' }));
+        }
       }
       document.querySelector('#all-count').textContent = counts.all;
       document.querySelector('#youtube-count').textContent = counts.youtube;
@@ -168,7 +171,7 @@
         counts[item.platform] = (counts[item.platform] || 0) + 1;
       });
       if (messages.length > 200) messages = messages.slice(-200);
-      render();
+      render(true);
     }
 
     document.querySelectorAll('[data-filter]').forEach((button) => button.addEventListener('click', () => {
