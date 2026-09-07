@@ -1,0 +1,17 @@
+{
+  "name": "youtube-twitch-chat-viewer",
+  "version": "1.0.0",
+  "description": "Watch YouTube Live Chat and Twitch Chat in one terminal",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "tmi.js": "^1.8.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
