@@ -12,6 +12,10 @@ const PORT = Number(process.env.PORT) || 3000;
 const INDEX_FILE = path.join(__dirname, "public", "index.html");
 const recentMessages = [];
 const clients = new Set();
+let watchersPromise;
+let stopYouTube = () => {};
+let stopTwitch = () => {};
+let stopKick = () => {};
 
 function publish(event, payload) {
   const message = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
@@ -33,9 +37,10 @@ function printError(platform, err) {
   publish("status", { platform, message: err.message });
 }
 
-function startServer() {
-  const server = http.createServer((request, response) => {
-    if (request.url === "/events") {
+function handleRequest(request, response) {
+  const requestUrl = new URL(request.url, `http://${request.headers.host || "localhost"}`);
+
+  if (requestUrl.pathname === "/events") {
       response.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -44,28 +49,32 @@ function startServer() {
       response.write(`event: history\ndata: ${JSON.stringify(recentMessages)}\n\n`);
       clients.add(response);
       request.on("close", () => clients.delete(response));
-      return;
-    }
+    return;
+  }
 
-    if (request.url === "/" || request.url === "/index.html") {
+  if (requestUrl.pathname === "/" || requestUrl.pathname === "/index.html") {
       response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       fs.createReadStream(INDEX_FILE).pipe(response);
-      return;
-    }
+    return;
+  }
 
-    response.writeHead(404);
-    response.end("Not found");
-  });
+  response.writeHead(404);
+  response.end("Not found");
+}
 
+function startServer() {
+  const server = http.createServer(handleRequest);
   server.listen(PORT, () => {
     console.log(`Chat viewer: http://localhost:${PORT}`);
   });
   return server;
 }
 
-async function main() {
-  const server = startServer();
-  const stopYouTube = await startYouTubeWatcher(
+function startWatchers() {
+  if (watchersPromise) return watchersPromise;
+
+  watchersPromise = (async () => {
+    stopYouTube = await startYouTubeWatcher(
     {
       apiKey: process.env.YOUTUBE_API_KEY,
       videoId: process.env.YOUTUBE_VIDEO_ID,
@@ -73,9 +82,9 @@ async function main() {
     },
     (msg) => handleMessage("youtube", msg),
     (err) => printError("youtube", err)
-  );
+    );
 
-  const stopTwitch = startTwitchWatcher(
+    stopTwitch = await startTwitchWatcher(
     {
       channel: process.env.TWITCH_CHANNEL,
       username: process.env.TWITCH_USERNAME,
@@ -84,14 +93,22 @@ async function main() {
     },
     (msg) => handleMessage("twitch", msg),
     (err) => printError("twitch", err)
-  );
+    );
 
-  const stopKick = startKickWatcher(
-    { channel: process.env.KICK_CHANNEL },
-    (msg) => handleMessage("kick", msg),
-    (err) => printError("kick", err)
-  );
+    stopKick = startKickWatcher(
+      { channel: process.env.KICK_CHANNEL },
+      (msg) => handleMessage("kick", msg),
+      (err) => printError("kick", err)
+    );
 
+  })();
+
+  return watchersPromise;
+}
+
+async function main() {
+  const server = startServer();
+  await startWatchers();
   console.log("Watching chat... press Ctrl+C to stop.");
 
   process.on("SIGINT", () => {
@@ -104,4 +121,8 @@ async function main() {
   });
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = handleRequest;
