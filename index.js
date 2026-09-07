@@ -12,6 +12,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const INDEX_FILE = path.join(__dirname, "public", "index.html");
 const recentMessages = [];
 const clients = new Set();
+let emotesPromise;
 let watchersPromise;
 let stopYouTube = () => {};
 let stopTwitch = () => {};
@@ -37,6 +38,65 @@ function printError(platform, err) {
   publish("status", { platform, message: err.message });
 }
 
+async function fetchJson(url) {
+  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.json();
+}
+
+function addBttvEmotes(catalog, emotes) {
+  for (const emote of emotes || []) {
+    catalog[emote.code] = `https://cdn.betterttv.net/emote/${emote.id}/2x`;
+  }
+}
+
+function addSevenTvEmotes(catalog, set) {
+  for (const emote of (set && set.emotes) || []) {
+    const file = (emote.data && emote.data.host && emote.data.host.files || [])
+      .find((item) => item.name === "2x.webp") || emote.data && emote.data.host && emote.data.host.files && emote.data.host.files[0];
+    if (file && emote.name && emote.data.host.url) {
+      catalog[emote.name] = `${emote.data.host.url}/${file.name}`;
+    }
+  }
+}
+
+function loadEmotes() {
+  if (emotesPromise) return emotesPromise;
+
+  emotesPromise = (async () => {
+    const catalog = {};
+    const [bttvGlobal, sevenTvGlobal] = await Promise.allSettled([
+      fetchJson("https://api.betterttv.net/3/cached/emotes/global"),
+      fetchJson("https://7tv.io/v3/emote-sets/global"),
+    ]);
+    if (bttvGlobal.status === "fulfilled") addBttvEmotes(catalog, bttvGlobal.value);
+    if (sevenTvGlobal.status === "fulfilled") addSevenTvEmotes(catalog, sevenTvGlobal.value);
+
+    if (process.env.TWITCH_CHANNEL) {
+      try {
+        const users = await fetchJson(`https://api.ivr.fi/v2/twitch/user?login=${encodeURIComponent(process.env.TWITCH_CHANNEL)}`);
+        const user = Array.isArray(users) ? users[0] : users;
+        if (user && user.id) {
+          const [bttvChannel, sevenTvChannel] = await Promise.allSettled([
+            fetchJson(`https://api.betterttv.net/3/cached/users/twitch/${user.id}`),
+            fetchJson(`https://7tv.io/v3/users/twitch/${user.id}`),
+          ]);
+          if (bttvChannel.status === "fulfilled") {
+            addBttvEmotes(catalog, bttvChannel.value.channelEmotes);
+            addBttvEmotes(catalog, bttvChannel.value.sharedEmotes);
+          }
+          if (sevenTvChannel.status === "fulfilled") addSevenTvEmotes(catalog, sevenTvChannel.value.emote_set);
+        }
+      } catch (error) {
+        console.error(`[emotes] channel lookup failed: ${error.message}`);
+      }
+    }
+    return catalog;
+  })();
+
+  return emotesPromise;
+}
+
 function handleRequest(request, response) {
   const requestUrl = new URL(request.url, `http://${request.headers.host || "localhost"}`);
 
@@ -49,6 +109,20 @@ function handleRequest(request, response) {
       response.write(`event: history\ndata: ${JSON.stringify(recentMessages)}\n\n`);
       clients.add(response);
       request.on("close", () => clients.delete(response));
+    return;
+  }
+
+  if (requestUrl.pathname === "/emotes") {
+    loadEmotes()
+      .then((catalog) => {
+        response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "public, max-age=3600" });
+        response.end(JSON.stringify(catalog));
+      })
+      .catch((error) => {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end("{}");
+        console.error(`[emotes] loading failed: ${error.message}`);
+      });
     return;
   }
 

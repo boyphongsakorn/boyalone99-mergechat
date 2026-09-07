@@ -27,6 +27,9 @@ Then edit `.env`:
 - **Kick**: set `KICK_CHANNEL` to the public channel slug. Kick chat is read in
   anonymous read-only mode, so no Kick credentials are required.
 
+The browser chat loads global BetterTTV and 7TV emotes, plus channel emotes for
+the configured Twitch channel when available.
+
 ## Run
 
 ```bash
