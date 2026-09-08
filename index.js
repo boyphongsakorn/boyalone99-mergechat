@@ -12,6 +12,13 @@ const PORT = Number(process.env.PORT) || 3000;
 const INDEX_FILE = path.join(__dirname, "public", "index.html");
 const recentMessages = [];
 const clients = new Set();
+const IGNORED_AUTHORS = new Set([
+  "nightbot",
+  "streamelements",
+  "moobot",
+  "trackerggbot",
+  "kofistreambot",
+]);
 let emotesPromise;
 let watchersPromise;
 let stopYouTube = () => {};
@@ -24,6 +31,8 @@ function publish(event, payload) {
 }
 
 function handleMessage(platform, { author, message, timestamp }) {
+  if (IGNORED_AUTHORS.has(String(author || "").trim().toLowerCase())) return;
+
   const chatMessage = { platform, author, message, timestamp };
   recentMessages.push(chatMessage);
   if (recentMessages.length > 200) recentMessages.shift();
